@@ -1,0 +1,27 @@
+{
+  "source_commit": "2273dd1631a5719f2cacc6e9abbf67ac0bc30bc0",
+  "source_tag": "v1.0.380",
+  "upstream_pr": 1482,
+  "adaptation": "diagnostic early static command unregister/invalidate",
+  "patch_sha256": "87852480d19faf76082b41ab21024784ae6e7bc85315343e7ce715d714a955e5",
+  "source_after": {
+    "src/core/managers/con_command_manager.cpp": "38ac1513a7ebf20bc2a0d42f2e64c1e4275e00cdf7947953a671d3ad4840d795",
+    "src/core/managers/con_command_manager.h": "96fd9609394c9e774032de02ff80c2559bf1dfe9a8599ad0aa61880b2be135b9",
+    "src/scripting/natives/natives_vector.cpp": "a16133df2aad5d9458dd065859ae81446c3a2698fac9e7b2841c2404ceab2e59"
+  },
+  "cmake_version": "3.31.12",
+  "cmake_url": "https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-windows-x86_64.zip",
+  "cmake_sha256": "0c4baa40f28b3f8225eb3fdf6946c987b4fe901403b4eaf2fbbd9378100aaa0c",
+  "windows_sdk": "10.0.26100.0",
+  "compiler_family": "MSVC v143 / Visual Studio 2022",
+  "official_native_sha256": "11a1ecb91458bf99abaf8dd79a22d7b483414e1a4be6b407e40982de41e0d705",
+  "expected_exports": [
+    "CreateInterface",
+    "InvokeNative"
+  ],
+  "expected_imports": [
+    "kernel32.dll",
+    "tier0.dll",
+    "ws2_32.dll"
+  ]
+}
