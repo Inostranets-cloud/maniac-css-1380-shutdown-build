@@ -57,11 +57,30 @@ foreach ($item in $lock.source_after.PSObject.Properties) {
 $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
 $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if ($LASTEXITCODE -ne 0 -or -not $vs) { throw 'Visual Studio 2022 C++ toolchain missing on runner' }
-$devcmd = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
-$environment = & cmd.exe /d /s /c "`"`"$devcmd`" -arch=x64 -host_arch=x64 >nul && set`""
-if ($LASTEXITCODE -ne 0) { throw 'Cannot initialize x64 compiler environment' }
+$devcmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
+if (-not (Test-Path -LiteralPath $devcmd -PathType Leaf)) { throw 'VsDevCmd.bat missing from the selected Visual Studio installation' }
+# Pass cmd.exe its raw command line. Keep the path in the child environment so
+# PowerShell does not serialize the nested quotes as native arguments.
+$startInfo = [Diagnostics.ProcessStartInfo]::new()
+$startInfo.FileName = "$env:SystemRoot\System32\cmd.exe"
+$startInfo.Arguments = '/d /s /v:off /u /c ""%CSS_BUILD_VSDEVCMD%" -arch=x64 -host_arch=x64 >nul && set"'
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+$startInfo.RedirectStandardOutput = $true
+$startInfo.StandardOutputEncoding = [Text.Encoding]::Unicode
+$startInfo.EnvironmentVariables['CSS_BUILD_VSDEVCMD'] = $devcmd
+$process = [Diagnostics.Process]::Start($startInfo)
+try {
+    $environment = $process.StandardOutput.ReadToEnd() -split '\r?\n'
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) { throw "Cannot initialize x64 compiler environment (cmd.exe exit $($process.ExitCode))" }
+} finally {
+    $process.Dispose()
+}
 foreach ($line in $environment) {
-    if ($line -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process') }
+    if ($line -match '^([^=]+)=(.*)$' -and $Matches[1] -ne 'CSS_BUILD_VSDEVCMD') {
+        [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process')
+    }
 }
 $sdk = Join-Path ${env:ProgramFiles(x86)} "Windows Kits/10/Include/$($lock.windows_sdk)/um/Windows.h"
 if (-not (Test-Path -LiteralPath $sdk)) { throw 'Pinned Windows SDK missing; do not install another automatically' }
