@@ -1,20 +1,43 @@
---- a/src/scripting/natives/natives_vector.cpp
-+++ b/src/scripting/natives/natives_vector.cpp
-@@ -56,6 +56,8 @@
-                                      (virtualFunctionCount * sizeof(ValveFunction)));
-     Msg("===== Dumping leaks =====\n");
- }
-+
-+ConCommand& DumpLeaksCommand() { return css_dump_leaks_command; }
- 
- Vector2D* Vector2DNew(ScriptContext& script_context) { return new Vector2D(); }
- 
 --- a/src/core/managers/con_command_manager.cpp
 +++ b/src/core/managers/con_command_manager.cpp
-@@ -252,6 +252,21 @@
+@@ -39,6 +39,7 @@
+ #include <schemasystem/schemasystem.h>
+ 
+ #include <algorithm>
++#include <utility>
+ 
+ #include "core/coreconfig.h"
+ #include "core/log.h"
+@@ -180,15 +181,20 @@
+     output << std::setw(2) << j << std::endl;
+ }
+ 
+-ConCommandInfo::ConCommandInfo()
++ConCommandInfo::ConCommandInfo() : ConCommandInfo(true)
+ {
+     callback_pre = globals::callbackManager.CreateCallback("");
+     callback_post = globals::callbackManager.CreateCallback("");
+ }
+ ConCommandInfo::~ConCommandInfo()
+ {
+-    globals::callbackManager.ReleaseCallback(callback_pre);
+-    globals::callbackManager.ReleaseCallback(callback_post);
++    ReleaseCallbacks();
++}
++
++void ConCommandInfo::ReleaseCallbacks()
++{
++    if (callback_pre) globals::callbackManager.ReleaseCallback(std::exchange(callback_pre, nullptr));
++    if (callback_post) globals::callbackManager.ReleaseCallback(std::exchange(callback_post, nullptr));
+ }
+ ConCommandInfo::ConCommandInfo(bool bNoCallbacks) {}
+ 
+@@ -252,8 +258,22 @@
  {
      m_hooks.Clear();
  
+-    globals::callbackManager.ReleaseCallback(m_global_cmd.callback_pre);
+-    globals::callbackManager.ReleaseCallback(m_global_cmd.callback_post);
 +    CSSHARP_CORE_INFO("ShutdownProbe: static command cleanup entered; cvars={}", globals::cvars != nullptr);
 +
 +    // Make the static destructors inert before the engine tears down the CVar tables.
@@ -30,9 +53,53 @@
 +        }
 +    }
 +
-     globals::callbackManager.ReleaseCallback(m_global_cmd.callback_pre);
-     globals::callbackManager.ReleaseCallback(m_global_cmd.callback_post);
++    m_global_cmd.ReleaseCallbacks();
  }
+ 
+ void CommandCallback(const CCommandContext& context, const CCommand& command)
+@@ -266,14 +286,8 @@
+ {
+     if (name == nullptr)
+     {
+-        if (mode == HookMode::Pre)
+-        {
+-            m_global_cmd.callback_pre->AddListener(callback);
+-        }
+-        else
+-        {
+-            m_global_cmd.callback_post->AddListener(callback);
+-        }
++        auto* globalCallback = mode == HookMode::Pre ? m_global_cmd.callback_pre : m_global_cmd.callback_post;
++        if (globalCallback) globalCallback->AddListener(callback);
+         return;
+     }
+ 
+@@ -306,14 +320,8 @@
+ {
+     if (name == nullptr)
+     {
+-        if (mode == HookMode::Pre)
+-        {
+-            m_global_cmd.callback_pre->RemoveListener(callback);
+-        }
+-        else
+-        {
+-            m_global_cmd.callback_post->RemoveListener(callback);
+-        }
++        auto* globalCallback = mode == HookMode::Pre ? m_global_cmd.callback_pre : m_global_cmd.callback_post;
++        if (globalCallback) globalCallback->RemoveListener(callback);
+         return;
+     }
+ 
+@@ -390,7 +398,7 @@
+ 
+     m_cmd_contexts[&args] = callingContext;
+ 
+-    if (globalCallback->GetFunctionCount() > 0)
++    if (globalCallback && globalCallback->GetFunctionCount() > 0)
+     {
+         globalCallback->ScriptContext().Reset();
+         globalCallback->ScriptContext().Push(ctx.GetPlayerSlot().Get());
 --- a/src/core/managers/con_command_manager.h
 +++ b/src/core/managers/con_command_manager.h
 @@ -51,10 +51,13 @@
@@ -48,4 +115,37 @@
 +ConCommand& DumpLeaksCommand();
  
  class ScriptCallback;
+ 
+@@ -72,6 +75,8 @@
+     ConCommandInfo();
+     ConCommandInfo(bool bNoCallbacks);
+     ~ConCommandInfo();
++    ConCommandInfo(const ConCommandInfo&) = delete;
++    ConCommandInfo& operator=(const ConCommandInfo&) = delete;
+ 
+   public:
+     void HookChange(CallbackT callback, bool post);
+@@ -79,9 +84,10 @@
+     ScriptCallback* GetCallback() { return callback_pre; }
+ 
+   private:
++    void ReleaseCallbacks();
+     ConCommandData* command;
+-    ScriptCallback* callback_pre;
+-    ScriptCallback* callback_post;
++    ScriptCallback* callback_pre = nullptr;
++    ScriptCallback* callback_post = nullptr;
+     bool server_only;
+ };
+ 
+--- a/src/scripting/natives/natives_vector.cpp
++++ b/src/scripting/natives/natives_vector.cpp
+@@ -56,6 +56,8 @@
+                                      (virtualFunctionCount * sizeof(ValveFunction)));
+     Msg("===== Dumping leaks =====\n");
+ }
++
++ConCommand& DumpLeaksCommand() { return css_dump_leaks_command; }
+ 
+ Vector2D* Vector2DNew(ScriptContext& script_context) { return new Vector2D(); }
  
